@@ -7,23 +7,22 @@ epochs = 10
 inp_feature_size = 25
 threshold = 0.5
 
-hidden_layers = list()
-logits = None
 
-def build_network(network_desc_file):
+def build_network(network_desc_file, X):
     # Building the network based on description file
+    hidden_layers = list()
+    logits = None
+
     with open(network_desc_file) as f:
-        global inp, logits
         for line in f:
             params = line.split(" ")
-            input_layer = tf.reshape(inp,[-1,25,25,1]) if len(hidden_layers) == 0 else hidden_layers[-1]
-            print(input_layer.shape)
+            input_layer = tf.reshape(X, [-1,25,25,1]) if len(hidden_layers) == 0 else hidden_layers[-1]
             if len(params) == 2:
                 # Convolutional layer description
                 kernel_size, filters = int(params[0]), int(params[1])
-                conv = tf.layers.conv2d(inputs=input_layer, filters= filters,
-                                        kernel_size= [kernel_size, kernel_size], activation= tf.nn.relu, padding='SAME')
-                max_pool = tf.layers.max_pooling2d(inputs = conv, pool_size=[2,2], strides=2, padding='SAME')
+                conv = tf.layers.conv2d(inputs=input_layer, filters=filters,
+                                        kernel_size=[kernel_size, kernel_size], activation=tf.nn.relu, padding='SAME')
+                max_pool = tf.layers.max_pooling2d(inputs=conv, pool_size=[2, 2], strides=2, padding='SAME')
                 hidden_layers.append(conv)
                 hidden_layers.append(max_pool)
             elif len(params) == 1:
@@ -31,21 +30,18 @@ def build_network(network_desc_file):
                 neurons = int(params[0])
                 input_layer = tf.contrib.layers.flatten(input_layer)
                 dense_layer = tf.layers.dense(inputs = input_layer, units=neurons, activation= tf.nn.relu)
-                logits = tf.layers.dense(inputs = dense_layer, units=1)
+                logits = tf.layers.dense(inputs=dense_layer, units=1)
                 hidden_layers.append(dense_layer)
                 break
+    return logits  # Incorrect network description files
 
-# input/output placeholder
-inp = tf.placeholder(tf.float32)
-labels = tf.placeholder(tf.float32)
-tf.reshape(labels,[-1,1])
 
-def train(model_file, data_folder):
+def train(model_file, data_folder, optimizer, loss, accuracy):
     data_gen = zen_gen.Data()
     data = data_gen.get_data(data_folder)
 
     with tf.Session() as session:
-        # read number of examples using the data utility
+        init = tf.global_variables_initializer()
         session.run(init)
         for e in range(epochs):
             processed = 0
@@ -64,19 +60,21 @@ def train(model_file, data_folder):
         save_path = saver.save(session, model_file)
         print("Model saved in file: ", save_path)
 
-build_network("network")
 
-print("No. of hidden layers" + str(len(hidden_layers)))
-# Defining loss function
-loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=labels, logits=logits))
+if __name__ == '__main__':
+    # input/output placeholder
+    inp = tf.placeholder(tf.float32)
+    labels = tf.placeholder(tf.float32)
+    tf.reshape(labels, [-1, 1])
 
-# Defining optimizer and training
-model_optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate).minimize(loss)
+    logits=build_network("network_desc", inp)
 
-# Calculate accuracy
-op = tf.nn.sigmoid(logits)
-prediction = tf.cast(tf.greater_equal(op, tf.constant(threshold, dtype=tf.float32)), "float")
-accuracy = tf.reduce_mean(tf.cast(tf.equal(prediction, labels), "float"))
-# confusion_matrix = tf.confusion_matrix(tf.argmax(op, 1), tf.argmax(op_soft_max, 1), num_classes=op_classes)
-init = tf.global_variables_initializer()
-train("model1", "data")
+    # Optimizer and Loss
+    loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=labels, logits=logits))
+    model_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
+
+    op = tf.nn.sigmoid(logits)
+    prediction = tf.cast(tf.greater_equal(op, tf.constant(threshold, dtype=tf.float32)), "float")
+    accuracy = tf.reduce_mean(tf.cast(tf.equal(prediction, labels), "float"))
+
+    train(model_file="model1", data_folder="data", optimizer=model_optimizer, accuracy=accuracy, loss=loss)
