@@ -11,10 +11,10 @@ class Data:
     def __init__(self):
         self.color = 0  # color for drawing the image. All images ddrawn in balck
         self.brush_stroke_max = 2  # Max brush stroke
-        self.pos_shift_max = 1  # Max shift in position of image shift in either direction as padding is of 2
-        self.rotation_max = 10  # Max positive/ negative rotation in degrees orientation transformation
+        self.pos_shift_max = 2  # Max shift in position of image shift in either direction as padding is of 2
+        self.rotation_max = 25  # Max positive/ negative rotation in degrees orientation transformation
         self.resize_ratio_min = 0.1  # (1- resize_ratio_min) gives lower bound on resized images size
-        self.ellip_num_max = 2  # Max no. of stray sllipsoids to be drawn in image
+        self.ellip_num_max = 3  # Max no. of stray sllipsoids to be drawn in image
         self.ellip_size_max = 2  # Max width, height of ellipsoid in pixels
         self.size = 25  # size of canvas
         self.base_im_o = self._draw_o()
@@ -171,6 +171,7 @@ class Data:
             file_names.append(file_name)
             x_list.append(image_array)
         x = np.array(x_list, dtype="float64")
+        # x.reshape(x.shape[0], x.shape[1], x.shape[2])
         y = np.array(y_list, dtype="float64")
         return (file_names,x,y)
 
