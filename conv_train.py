@@ -2,12 +2,12 @@ import tensorflow as tf
 import zener_generator as zen_gen
 
 
-learning_rate = 0.1
+learning_rate = 0.001
 epochs = 10
 inp_feature_size = 25
 threshold = 0.5
-mini_batch_size = 10
-regularizer = 0.00001
+mini_batch_size = 50
+regularizer = 0.001
 
 def build_network(network_desc_file, X):
     hidden_layers = list()
@@ -33,7 +33,7 @@ def build_network(network_desc_file, X):
                 dense_layer = tf.layers.dense(inputs = input_layer, units=neurons, activation= tf.nn.relu)
                 hidden_layers.append(dense_layer)
     if(len(hidden_layers)) == 0 : raise Exception("Invalid network description") # Incorrect network_desc description files
-    logits = tf.layers.dense(inputs=hidden_layers[-1], units=1)
+    logits = tf.layers.dense(inputs=hidden_layers[-1], units=2)
     return logits
 
 
@@ -74,8 +74,8 @@ def test(model_file, data_folder, symbol_name):
         # Check the values of the variables
         # read number of examples using the data utility
         test_x, test_y = data.get_test_data()
-        a, lab, pred = session.run([accuracy, labels, prediction], feed_dict={inp:test_x, labels:test_y})
-        print(" Labels + Prediction : ", zip(lab, pred) )
+        a, lab, op = session.run([accuracy, labels, op_soft_max], feed_dict={inp:test_x, labels:test_y})
+        print(" Labels + Prediction : ", list(zip(lab, op)))
         print("Model Accuracy : ", a)
         # print("Confusion Matrix :\n", cm)
 
@@ -83,21 +83,24 @@ if __name__ == '__main__':
     # input/output placeholder
     inp = tf.placeholder(tf.float32)
     labels = tf.placeholder(tf.float32)
-    tf.reshape(labels, [-1, 1])
+    tf.reshape(labels, [-1, 2])
 
     logits=build_network("network_desc", inp)
+    op_soft_max = tf.nn.softmax(logits)
 
     # Optimizer and Loss
-    loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=labels, logits=logits))
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=logits))
     lossL2 = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()
                        if 'bias' not in v.name]) * regularizer
     loss = loss + lossL2
     model_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
 
-    op = tf.nn.sigmoid(logits)
-    prediction = tf.cast(tf.greater_equal(op, tf.constant(threshold, dtype=tf.float32)), "float")
-    accuracy = tf.reduce_mean(tf.cast(tf.equal(prediction, labels), "float"))
+    #op = tf.nn.sigmoid(logits)
+    #prediction = tf.cast(tf.greater_equal(op, tf.constant(threshold, dtype=tf.float32)), "float")
 
-    train(model_file="model1", data_folder="train_data_new", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol_name = "P")
-    test(model_file="model1", data_folder="test_data", symbol_name="P")
+    prediction = tf.equal(tf.argmax(op_soft_max, 1), tf.argmax(labels, 1))
+    accuracy = tf.reduce_mean(tf.cast(prediction, "float"))
+
+    train(model_file="D:\SJSU\Fall17\CS256\ConvolutionalNN\\model\model1", data_folder="D:\SJSU\Fall17\CS256\ConvolutionalNN\\train_data_new", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol_name = "P")
+    test(model_file="D:\SJSU\Fall17\CS256\ConvolutionalNN\\model\model1", data_folder="D:\SJSU\Fall17\CS256\ConvolutionalNN\\test_data", symbol_name="P")
 
