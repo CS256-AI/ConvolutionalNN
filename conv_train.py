@@ -45,8 +45,10 @@ def define_loss_function(loss_type, logits, labels):
     if loss_type == "cross":
         regularization_loss = 0
     elif loss_type == "cross-l1":
-        regularization_loss = tf.add_n([tf.nn.l1_loss(v) for v in tf.trainable_variables()
-                                        if 'bias' not in v.name]) * regularizer
+        l1_regularizer = tf.contrib.layers.l1_regularizer(scale=regularizer, scope=None)
+        weights = [v for v in tf.trainable_variables() if 'bias' not in v.name]  # all vars of your graph
+        regularization_loss = tf.contrib.layers.apply_regularization(l1_regularizer, weights)
+
     elif loss_type == "cross-l2":
         regularization_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()
                            if 'bias' not in v.name]) * regularizer
