@@ -56,7 +56,7 @@ def define_loss_function(loss_type, logits, labels):
 def train(model_file, data_folder, optimizer, loss, accuracy, symbol_name, epochs):
     data_gen = zen_gen.DataUtil()
     data = data_gen.get_data(data_folder, symbol_name)
-    # file_names, batch_x, batch_y = data
+    train_x, train_y = data.get_test_data()
 
     with tf.Session() as session:
         init = tf.global_variables_initializer()
@@ -69,7 +69,8 @@ def train(model_file, data_folder, optimizer, loss, accuracy, symbol_name, epoch
                 o, l, a = session.run([optimizer, loss, accuracy], feed_dict={inp: batch_x, labels: batch_y})
                 processed += mini_batch_size
                 print("Processed {} training data. Batch Loss : {}. Batch Accuracy : {}".format(processed, l, a))
-        print("Training complete. Final Loss: {}".format(l))
+        t_l, t_a = session.run([loss, accuracy], feed_dict={inp: train_x, labels: train_y})
+        print("Training complete. Final Loss: {}, Final accuracy: {}".format(t_l, t_a))
 
         saver = tf.train.Saver()
         if not model_file.endswith(".ckpt"): model_file += ".ckpt"
@@ -119,6 +120,7 @@ def five_fold_train(model_file, data_folder, optimizer, loss, accuracy, symbol_n
         if not model_file.endswith(".ckpt"): model_file+= ".ckpt"
         save_path = saver.save(session, model_file)
         print("Model saved in file: ", save_path)
+        return (train_loss,valid_loss)
 
 def test(model_file, data_folder, symbol_name):
     saver = tf.train.Saver()
@@ -136,6 +138,7 @@ def test(model_file, data_folder, symbol_name):
         a, lab, op = session.run([accuracy, labels, op_soft_max], feed_dict={inp:test_x, labels:test_y})
         # print(" Labels + Prediction : ", list(zip(lab, op)))
         print("Model Accuracy : ", a)
+        return a
         # print("Confusion Matrix :\n", cm)
 
 
@@ -144,24 +147,32 @@ def experiment_1(model_dest, data_folder, test_folder, optimizer, accuracy, loss
     Experiment compares the training and validation loss of the model for various max updates(epochs) count
 
     """
-    training_cost, validation_cost, max_updates = list(), list(), list()
-    for epochs in range(10):
+    training_cost, validation_cost, test_accuracy, max_updates = list(), list(), list(), list()
+    for epochs in range(2,31):
         max_updates.append(epochs)
-        model_file = model_dest+"_"+str(epochs)
-        t_cost, v_cost = train(model_file=model_file, data_folder=data_folder,
-                               optimizer=optimizer, loss=loss, accuracy= accuracy, symbol_name=symbol)
+        model_file = model_dest+"_"+str(epochs)+"_"+symbol
+        t_cost, v_cost = five_fold_train(model_file=model_file, data_folder=data_folder,
+                               optimizer=optimizer, loss=loss, accuracy= accuracy, symbol_name=symbol, epochs=epochs)
+        t_accuracy = test(model_file=model_file, data_folder=data_folder, symbol_name=symbol)
         training_cost.append(t_cost)
         validation_cost.append(v_cost)
+        test_accuracy.append(t_accuracy)
 
     # Plotting results
-    p.title("Max-Updates vs Loss")
+    p.subplot(2, 1, 1)
+    p.title("Training & Validation Cost vs Max-updates")
     p.xlabel("Max-updates")
-    p.ylabel("Loss")
-
+    p.ylabel("Cost")
+    p.yticks([0, 0.05, 0.1, 0.15, 0.2, 0.25])
     p.plot(max_updates, training_cost, 'b-', label="Training cost")
-    p.plot(max_updates, training_cost, 'g-', label="Validation cost")
-
+    p.plot(max_updates, validation_cost, 'g-', label="Validation cost")
     p.legend()
+    p.subplot(2, 1, 2)
+    p.title("Test Accuracy of Models")
+    p.xlabel("Model No")
+    p.ylabel("Accuracy")
+    p.plot(max_updates, test_accuracy, 'r-', label="Test Accuracy")
+    p.tight_layout()
     p.show()
 
 
@@ -171,7 +182,7 @@ if __name__ == '__main__':
     labels = tf.placeholder(tf.float32)
     tf.reshape(labels, [-1, 2])
 
-    logits = build_network("network_desc", inp)
+    logits = build_network("network_desc_2", inp)
     op_soft_max = tf.nn.softmax(logits)
     loss = define_loss_function('cross-l2', logits, labels)
 
@@ -180,6 +191,8 @@ if __name__ == '__main__':
     prediction = tf.equal(tf.argmax(op_soft_max, 1), tf.argmax(labels, 1))
     accuracy = tf.reduce_mean(tf.cast(prediction, "float"))
 
-    five_fold_train(model_file="model_w_fivefold", data_folder="/Users/rahuldalal/train_data_1k", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol_name = "W", epochs = 2)
-    test(model_file="model_w_fivefold", data_folder="/Users/rahuldalal/test_data", symbol_name="w")
-
+    # experiment_1(model_dest="/Users/rahuldalal/model/", data_folder="/Users/rahuldalal/train_data_1k", test_folder="/Users/rahuldalal/test_data", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol = "P")
+    train(model_file="model_s_train_exp2_1l", data_folder="/Users/rahuldalal/train_data_1k", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol_name="s", epochs=10)
+    five_fold_train(model_file="model_s_fivefold_exp2_1l", data_folder="/Users/rahuldalal/train_data_1k", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol_name="s", epochs=10)
+    test(model_file="model_s_train_exp2_1l", data_folder="/Users/rahuldalal/test_data", symbol_name="s")
+    test(model_file="model_s_fivefold_exp2_1l", data_folder="/Users/rahuldalal/test_data", symbol_name="s")
