@@ -3,7 +3,7 @@ import zener_generator as zen_gen
 
 
 learning_rate = 0.001
-epochs = 5
+# epochs = 5
 inp_feature_size = 25
 threshold = 0.5
 mini_batch_size = 50
@@ -53,7 +53,7 @@ def define_loss_function(loss_type, logits, labels):
     return base_loss + regularization_loss
 
 
-def train(model_file, data_folder, optimizer, loss, accuracy, symbol_name):
+def train(model_file, data_folder, optimizer, loss, accuracy, symbol_name, epochs):
     data_gen = zen_gen.DataUtil()
     data = data_gen.get_data(data_folder, symbol_name)
     # file_names, batch_x, batch_y = data
@@ -76,6 +76,48 @@ def train(model_file, data_folder, optimizer, loss, accuracy, symbol_name):
         save_path = saver.save(session, model_file)
         print("Model saved in file: ", save_path)
 
+def five_fold_train(model_file, data_folder, optimizer, loss, accuracy, symbol_name, epochs):
+    data_gen = zen_gen.DataUtil()
+    total_data = data_gen.get_data(data_folder, symbol_name).total_data
+    train_loss = 0.0; valid_loss = 0.0; train_acc = 0.0; valid_acc = 0.0
+    with tf.Session() as session:
+        init = tf.global_variables_initializer()
+        session.run(init)
+        fold = len(total_data)/5
+        valid_fold_start, valid_fold_end = 0, fold
+        for f in range(5):
+            print("Training data by leaving out fold {}".format(f+1))
+            train_data = zen_gen.Data(total_data[:valid_fold_start] + total_data[valid_fold_end:])
+            valid_data = zen_gen.Data(total_data[valid_fold_start:valid_fold_end])
+            train_x, train_y = train_data.get_test_data() #Complete training data
+            valid_x, valid_y = valid_data.get_test_data()
+            # read number of examples using the data utility
+            for e in range(epochs):
+                processed = 0
+                print("Processing epoch {} of {}".format(e+1, epochs))
+                # batch_iters = len(train_data)/mini_batch_size
+                for batch_x, batch_y in train_data.get_epoch_data(mini_batch_size):
+                    b_o, b_l, b_a = session.run([optimizer, loss, accuracy], feed_dict={inp: batch_x, labels: batch_y})
+                    processed += mini_batch_size
+                    print("Processed {} training data. Current Loss : {}. Batch Accuracy : {}".format(processed, b_l, b_a))
+            # Get the training loss and accuracy
+            t_l, t_a = session.run([loss, accuracy], feed_dict={inp: train_x, labels: train_y})
+            print("Training complete by leaving out fold {}. Loss: {}. Accuracy: {}".format(f + 1, t_l, t_a))
+            # Get the validation loss and accuracy
+            v_l, v_a = session.run([loss, accuracy], feed_dict={inp: valid_x, labels: valid_y})
+            print("Training complete by leaving out fold {}. Loss: {}. Accuracy: {}".format(f + 1, v_l, v_a))
+            train_loss += t_l; valid_loss += v_l
+            train_acc += t_a; valid_acc += v_a
+            valid_fold_start += fold
+            valid_fold_end += fold
+        train_loss = train_loss/5; valid_loss = valid_loss/5
+        train_acc = train_acc / 5; valid_acc = valid_acc / 5
+        print(' Average training loss : {}, Average validation loss : {}'.format(train_loss, valid_loss))
+        print(' Average training accuracy : {}, Average validation accuracy : {}'.format(train_acc, valid_acc))
+        saver = tf.train.Saver()
+        if not model_file.endswith(".ckpt"): model_file+= ".ckpt"
+        save_path = saver.save(session, model_file)
+        print("Model saved in file: ", save_path)
 
 def test(model_file, data_folder, symbol_name):
     saver = tf.train.Saver()
@@ -91,7 +133,7 @@ def test(model_file, data_folder, symbol_name):
         # read number of examples using the data utility
         test_x, test_y = data.get_test_data()
         a, lab, op = session.run([accuracy, labels, op_soft_max], feed_dict={inp:test_x, labels:test_y})
-        print(" Labels + Prediction : ", list(zip(lab, op)))
+        # print(" Labels + Prediction : ", list(zip(lab, op)))
         print("Model Accuracy : ", a)
         # print("Confusion Matrix :\n", cm)
 
@@ -111,6 +153,6 @@ if __name__ == '__main__':
     prediction = tf.equal(tf.argmax(op_soft_max, 1), tf.argmax(labels, 1))
     accuracy = tf.reduce_mean(tf.cast(prediction, "float"))
 
-    #train(model_file="D:\SJSU\Fall17\CS256\ConvolutionalNN\\model\W\model", data_folder="D:\SJSU\Fall17\CS256\cs256_hw4_data\\train_data_w", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol_name = "W")
-    test(model_file="D:\SJSU\Fall17\CS256\ConvolutionalNN\\model\W\model", data_folder="D:\SJSU\Fall17\CS256\ConvolutionalNN\\dummy", symbol_name="w")
+    five_fold_train(model_file="model_w_fivefold", data_folder="/Users/rahuldalal/train_data_1k", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol_name = "W", epochs = 2)
+    test(model_file="model_w_fivefold", data_folder="/Users/rahuldalal/test_data", symbol_name="w")
 
