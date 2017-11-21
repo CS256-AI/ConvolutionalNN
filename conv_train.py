@@ -1,6 +1,6 @@
 import tensorflow as tf
 import zener_generator as zen_gen
-
+import matplotlib.pyplot as p
 
 learning_rate = 0.001
 epochs = 5
@@ -44,7 +44,7 @@ def define_loss_function(loss_type, logits, labels):
     if loss_type == "cross":
         regularization_loss = 0
     elif loss_type == "cross-l1":
-        regularization_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()
+        regularization_loss = tf.add_n([tf.nn.l1_loss(v) for v in tf.trainable_variables()
                                         if 'bias' not in v.name]) * regularizer
     elif loss_type == "cross-l2":
         regularization_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()
@@ -75,6 +75,7 @@ def train(model_file, data_folder, optimizer, loss, accuracy, symbol_name):
         if not model_file.endswith(".ckpt"): model_file += ".ckpt"
         save_path = saver.save(session, model_file)
         print("Model saved in file: ", save_path)
+    return 1,2
 
 
 def test(model_file, data_folder, symbol_name):
@@ -94,6 +95,32 @@ def test(model_file, data_folder, symbol_name):
         print(" Labels + Prediction : ", list(zip(lab, op)))
         print("Model Accuracy : ", a)
         # print("Confusion Matrix :\n", cm)
+
+
+def experiment_1(model_dest, data_folder, test_folder, optimizer, accuracy, loss, symbol):
+    """
+    Experiment compares the training and validation loss of the model for various max updates(epochs) count
+
+    """
+    training_cost, validation_cost, max_updates = list(), list(), list()
+    for epochs in range(10):
+        max_updates.append(epochs)
+        model_file = model_dest+"_"+str(epochs)
+        t_cost, v_cost = train(model_file=model_file, data_folder=data_folder,
+                               optimizer=optimizer, loss=loss, accuracy= accuracy, symbol_name=symbol)
+        training_cost.append(t_cost)
+        validation_cost.append(v_cost)
+
+    # Plotting results
+    p.title("Max-Updates vs Loss")
+    p.xlabel("Max-updates")
+    p.ylabel("Loss")
+
+    p.plot(max_updates, training_cost, 'b-', label="Training cost")
+    p.plot(max_updates, training_cost, 'g-', label="Validation cost")
+
+    p.legend()
+    p.show()
 
 
 if __name__ == '__main__':
