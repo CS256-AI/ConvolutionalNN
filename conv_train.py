@@ -1,6 +1,7 @@
 import tensorflow as tf
 import zener_generator as zen_gen
 import matplotlib.pyplot as p
+import sys
 import time
 
 learning_rate = 0.001
@@ -43,9 +44,7 @@ def define_loss_function(loss_type, logits, labels):
     loss_type = loss_type.lower()
     base_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=logits))
 
-    if loss_type == "cross":
-        regularization_loss = 0
-    elif loss_type == "cross-l1":
+    if loss_type == "cross-l1":
         l1_regularizer = tf.contrib.layers.l1_regularizer(scale=regularizer, scope=None)
         weights = [v for v in tf.trainable_variables() if 'bias' not in v.name]  # all vars of your graph
         regularization_loss = tf.contrib.layers.apply_regularization(l1_regularizer, weights)
@@ -53,6 +52,8 @@ def define_loss_function(loss_type, logits, labels):
     elif loss_type == "cross-l2":
         regularization_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()
                            if 'bias' not in v.name]) * regularizer
+    else:
+        regularization_loss = 0
 
     return base_loss + regularization_loss
 
@@ -88,7 +89,8 @@ def train(model_file, data_folder, optimizer, loss, accuracy, symbol_name, epoch
     print("Time for training : {} s".format(end_time - start_time))
     return snapshot
 
-def five_fold_train(model_file, data_folder, optimizer, loss, accuracy, symbol_name, epochs):
+
+def five_fold_train(model_file, data_folder, optimizer, loss, accuracy, symbol_name, epochs, epsilon=0.01):
     start_time = time.time()
     data_gen = zen_gen.DataUtil()
     total_data = data_gen.get_data(data_folder, symbol_name).total_data
@@ -96,7 +98,7 @@ def five_fold_train(model_file, data_folder, optimizer, loss, accuracy, symbol_n
     with tf.Session() as session:
         init = tf.global_variables_initializer()
         session.run(init)
-        fold = len(total_data)/5
+        fold = len(total_data)//5
         valid_fold_start, valid_fold_end = 0, fold
         for f in range(5):
             print("Training data by leaving out fold {}".format(f+1))
@@ -105,7 +107,11 @@ def five_fold_train(model_file, data_folder, optimizer, loss, accuracy, symbol_n
             train_x, train_y = train_data.get_test_data() #Complete training data
             valid_x, valid_y = valid_data.get_test_data()
             # read number of examples using the data utility
+            t_l = epsilon
             for e in range(epochs):
+                if t_l < epsilon:
+                    print("Model converged within epsilon")
+                    break
                 processed = 0
                 print("Processing epoch {} of {}".format(e+1, epochs))
                 # batch_iters = len(train_data)/mini_batch_size
@@ -113,8 +119,10 @@ def five_fold_train(model_file, data_folder, optimizer, loss, accuracy, symbol_n
                     b_o, b_l, b_a = session.run([optimizer, loss, accuracy], feed_dict={inp: batch_x, labels: batch_y})
                     processed += mini_batch_size
                     print("Processed {} training data. Current Loss : {}. Batch Accuracy : {}".format(processed, b_l, b_a))
-            # Get the training loss and accuracy
-            t_l, t_a = session.run([loss, accuracy], feed_dict={inp: train_x, labels: train_y})
+                # Get the training loss and accuracy
+                t_l, t_a = session.run([loss, accuracy], feed_dict={inp: train_x, labels: train_y})
+
+            #t_l, t_a = session.run([loss, accuracy], feed_dict={inp: train_x, labels: train_y})
             print("Training complete by leaving out fold {}. Loss: {}. Accuracy: {}".format(f + 1, t_l, t_a))
             # Get the validation loss and accuracy
             v_l, v_a = session.run([loss, accuracy], feed_dict={inp: valid_x, labels: valid_y})
@@ -134,6 +142,7 @@ def five_fold_train(model_file, data_folder, optimizer, loss, accuracy, symbol_n
         end_time = time.time()
         print("Time for five-fold training : {} s".format(end_time - start_time))
         return (train_loss,valid_loss)
+
 
 def test(model_file, data_folder, symbol_name):
     saver = tf.train.Saver()
@@ -223,25 +232,33 @@ def experiment_2(model_dest, data_folder, optimizer, accuracy, symbol, num_epoch
 
 
 if __name__ == '__main__':
-    # input/output placeholder
-    inp = tf.placeholder(tf.float32)
-    labels = tf.placeholder(tf.float32)
-    tf.reshape(labels, [-1, 2])
+    try:
+        cost, network_desciption = sys.argv[1:3]
+        epsilon, max_updates = float(sys.argv[3]), int(sys.argv[4])
+        class_letter, model_file, train_folder = sys.argv[5:]
 
-    logits = build_network("network_desc", inp)
-    op_soft_max = tf.nn.softmax(logits)
+        # Building network parameters
+        inp = tf.placeholder(tf.float32)
+        labels = tf.placeholder(tf.float32)
+        tf.reshape(labels, [-1, 2])
 
-    loss = define_loss_function('cross', logits, labels)
-    model_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
+        logits = build_network(network_desciption, inp)
+        op_soft_max = tf.nn.softmax(logits)
+        loss = define_loss_function(cost, logits, labels)
+        model_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
 
-    prediction = tf.equal(tf.argmax(op_soft_max, 1), tf.argmax(labels, 1))
-    accuracy = tf.reduce_mean(tf.cast(prediction, "float"))
+        prediction = tf.equal(tf.argmax(op_soft_max, 1), tf.argmax(labels, 1))
+        accuracy = tf.reduce_mean(tf.cast(prediction, "float"))
 
-
-    experiment_2("D:\SJSU\Fall17\CS256\ConvolutionalNN\model",
-                 "D:\SJSU\Fall17\CS256\cs256_hw4_data\\train_data_w", optimizer=model_optimizer,
-                 accuracy=accuracy, symbol="W", num_epochs=num_epochs)
-
-    #five_fold_train(model_file="model_s_fivefold_exp2_1l", data_folder="/Users/rahuldalal/train_data_1k", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol_name="s", epochs=10)
-    #test(model_file="model_s_train_exp2_1l", data_folder="/Users/rahuldalal/test_data", symbol_name="s")
-    #test(model_file="model_s_fivefold_exp2_1l", data_folder="/Users/rahuldalal/test_data", symbol_name="s")
+        if cost.lower() == "ctest":
+            # Testing the model
+            test(model_file, train_folder, class_letter)
+        elif cost.lower() in ["cross", "cross-l1", "cross-l2"]:
+            five_fold_train(model_file, train_folder, model_optimizer, loss, accuracy, class_letter, max_updates,
+                            epsilon)
+        else:
+            print("Invalid cost option. Valid values are ['cross','cross-l1','cross-l2','ctest']")
+            sys.exit()
+    except ValueError as e:
+        print("Invalid command. Correct pattern python conv_train.py cost network_description epsilon max_updates class_letter model_file_name train_folder_name")
+        sys.exit()
