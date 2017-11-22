@@ -4,11 +4,12 @@ import matplotlib.pyplot as p
 import time
 
 learning_rate = 0.001
-# epochs = 5
+num_epochs = 5
 inp_feature_size = 25
 threshold = 0.5
 mini_batch_size = 50
 regularizer = 0.001
+
 
 def build_network(network_desc_file, X):
     hidden_layers = list()
@@ -60,7 +61,9 @@ def train(model_file, data_folder, optimizer, loss, accuracy, symbol_name, epoch
     start_time = time.time()
     data_gen = zen_gen.DataUtil()
     data = data_gen.get_data(data_folder, symbol_name)
+    data_size = len(data.total_data)
     train_x, train_y = data.get_test_data()
+    snapshot = list()
 
     with tf.Session() as session:
         init = tf.global_variables_initializer()
@@ -73,6 +76,7 @@ def train(model_file, data_folder, optimizer, loss, accuracy, symbol_name, epoch
                 o, l, a = session.run([optimizer, loss, accuracy], feed_dict={inp: batch_x, labels: batch_y})
                 processed += mini_batch_size
                 print("Processed {} training data. Batch Loss : {}. Batch Accuracy : {}".format(processed, l, a))
+                snapshot.append(( e*data_size+processed, l))
         t_l, t_a = session.run([loss, accuracy], feed_dict={inp: train_x, labels: train_y})
         print("Training complete. Final Training Loss: {}, Final Training accuracy: {}".format(t_l, t_a))
 
@@ -82,7 +86,7 @@ def train(model_file, data_folder, optimizer, loss, accuracy, symbol_name, epoch
         print("Model saved in file: ", save_path)
     end_time = time.time()
     print("Time for training : {} s".format(end_time - start_time))
-    return (t_l, t_a)
+    return snapshot
 
 def five_fold_train(model_file, data_folder, optimizer, loss, accuracy, symbol_name, epochs):
     start_time = time.time()
@@ -185,23 +189,59 @@ def experiment_1(model_dest, data_folder, test_folder, optimizer, accuracy, loss
     p.show()
 
 
+def experiment_2(model_dest, data_folder, optimizer, accuracy, symbol, num_epochs):
+    loss = define_loss_function('cross', logits, labels)
+    loss_l1 = define_loss_function('cross-l1', logits, labels)
+    loss_l2 = define_loss_function('cross-l2', logits, labels)
+
+    model_dest = model_dest + "/{}_{}_{}/"
+
+    result_l1 = train(model_file=model_dest.format(symbol, "l1", num_epochs),
+                      data_folder=data_folder, optimizer=model_optimizer,
+                      accuracy=accuracy, loss=loss_l1, symbol_name=symbol, epochs=num_epochs)
+
+    result_l2 = train(model_file=model_dest.format(symbol, "l2", num_epochs),
+                      data_folder=data_folder, optimizer=model_optimizer,
+                      accuracy=accuracy, loss=loss_l2, symbol_name=symbol, epochs=num_epochs)
+
+    result = train(model_file=model_dest.format(symbol, "ll", num_epochs),
+                   data_folder=data_folder, optimizer=model_optimizer,
+                   accuracy=accuracy, loss=loss, symbol_name=symbol, epochs=num_epochs)
+
+    x, y = zip(*result_l1)
+    x, y2 = zip(*result_l2)
+    x, y3 = zip(*result)
+
+    p.title("Convergence")
+    p.xlabel("Data")
+    p.ylabel("Cost")
+    p.plot(x, y, 'b-', label="L1 regularization")
+    p.plot(x, y2, "g-", label="L2 regularization")
+    p.plot(x, y3, "r-", label="No regularization")
+    p.legend()
+    p.show()
+
+
 if __name__ == '__main__':
     # input/output placeholder
     inp = tf.placeholder(tf.float32)
     labels = tf.placeholder(tf.float32)
     tf.reshape(labels, [-1, 2])
 
-    logits = build_network("network_desc_2", inp)
+    logits = build_network("network_desc", inp)
     op_soft_max = tf.nn.softmax(logits)
-    loss = define_loss_function('cross-l2', logits, labels)
 
+    loss = define_loss_function('cross', logits, labels)
     model_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
 
     prediction = tf.equal(tf.argmax(op_soft_max, 1), tf.argmax(labels, 1))
     accuracy = tf.reduce_mean(tf.cast(prediction, "float"))
 
-    # experiment_1(model_dest="/Users/rahuldalal/model/", data_folder="/Users/rahuldalal/train_data_1k", test_folder="/Users/rahuldalal/test_data", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol = "P")
-    train(model_file="model_w_train_exp3_2", data_folder="/Users/rahuldalal/train_data_1k", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol_name="w", epochs=1)
-    five_fold_train(model_file="model_w_fivefold_exp3_2", data_folder="/Users/rahuldalal/train_data_1k", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol_name="w", epochs=1)
-    test(model_file="model_w_train_exp3_2", data_folder="/Users/rahuldalal/test_data", symbol_name="w")
-    test(model_file="model_w_fivefold_exp3_2", data_folder="/Users/rahuldalal/test_data", symbol_name="w")
+
+    experiment_2("D:\SJSU\Fall17\CS256\ConvolutionalNN\model",
+                 "D:\SJSU\Fall17\CS256\cs256_hw4_data\\train_data_w", optimizer=model_optimizer,
+                 accuracy=accuracy, symbol="W", num_epochs=num_epochs)
+
+    #five_fold_train(model_file="model_s_fivefold_exp2_1l", data_folder="/Users/rahuldalal/train_data_1k", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol_name="s", epochs=10)
+    #test(model_file="model_s_train_exp2_1l", data_folder="/Users/rahuldalal/test_data", symbol_name="s")
+    #test(model_file="model_s_fivefold_exp2_1l", data_folder="/Users/rahuldalal/test_data", symbol_name="s")
