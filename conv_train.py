@@ -1,6 +1,7 @@
 import tensorflow as tf
 import zener_generator as zen_gen
 import matplotlib.pyplot as p
+import time
 
 learning_rate = 0.001
 # epochs = 5
@@ -54,6 +55,7 @@ def define_loss_function(loss_type, logits, labels):
 
 
 def train(model_file, data_folder, optimizer, loss, accuracy, symbol_name, epochs):
+    start_time = time.time()
     data_gen = zen_gen.DataUtil()
     data = data_gen.get_data(data_folder, symbol_name)
     train_x, train_y = data.get_test_data()
@@ -70,15 +72,18 @@ def train(model_file, data_folder, optimizer, loss, accuracy, symbol_name, epoch
                 processed += mini_batch_size
                 print("Processed {} training data. Batch Loss : {}. Batch Accuracy : {}".format(processed, l, a))
         t_l, t_a = session.run([loss, accuracy], feed_dict={inp: train_x, labels: train_y})
-        print("Training complete. Final Loss: {}, Final accuracy: {}".format(t_l, t_a))
+        print("Training complete. Final Training Loss: {}, Final Training accuracy: {}".format(t_l, t_a))
 
         saver = tf.train.Saver()
         if not model_file.endswith(".ckpt"): model_file += ".ckpt"
         save_path = saver.save(session, model_file)
         print("Model saved in file: ", save_path)
-    return 1,2
+    end_time = time.time()
+    print("Time for training : {} s".format(end_time - start_time))
+    return (t_l, t_a)
 
 def five_fold_train(model_file, data_folder, optimizer, loss, accuracy, symbol_name, epochs):
+    start_time = time.time()
     data_gen = zen_gen.DataUtil()
     total_data = data_gen.get_data(data_folder, symbol_name).total_data
     train_loss = 0.0; valid_loss = 0.0; train_acc = 0.0; valid_acc = 0.0
@@ -120,6 +125,8 @@ def five_fold_train(model_file, data_folder, optimizer, loss, accuracy, symbol_n
         if not model_file.endswith(".ckpt"): model_file+= ".ckpt"
         save_path = saver.save(session, model_file)
         print("Model saved in file: ", save_path)
+        end_time = time.time()
+        print("Time for five-fold training : {} s".format(end_time - start_time))
         return (train_loss,valid_loss)
 
 def test(model_file, data_folder, symbol_name):
@@ -192,7 +199,7 @@ if __name__ == '__main__':
     accuracy = tf.reduce_mean(tf.cast(prediction, "float"))
 
     # experiment_1(model_dest="/Users/rahuldalal/model/", data_folder="/Users/rahuldalal/train_data_1k", test_folder="/Users/rahuldalal/test_data", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol = "P")
-    train(model_file="model_s_train_exp2_1l", data_folder="/Users/rahuldalal/train_data_1k", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol_name="s", epochs=10)
-    five_fold_train(model_file="model_s_fivefold_exp2_1l", data_folder="/Users/rahuldalal/train_data_1k", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol_name="s", epochs=10)
-    test(model_file="model_s_train_exp2_1l", data_folder="/Users/rahuldalal/test_data", symbol_name="s")
-    test(model_file="model_s_fivefold_exp2_1l", data_folder="/Users/rahuldalal/test_data", symbol_name="s")
+    train(model_file="model_w_train_exp3_2", data_folder="/Users/rahuldalal/train_data_1k", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol_name="w", epochs=1)
+    five_fold_train(model_file="model_w_fivefold_exp3_2", data_folder="/Users/rahuldalal/train_data_1k", optimizer=model_optimizer, accuracy=accuracy, loss=loss, symbol_name="w", epochs=1)
+    test(model_file="model_w_train_exp3_2", data_folder="/Users/rahuldalal/test_data", symbol_name="w")
+    test(model_file="model_w_fivefold_exp3_2", data_folder="/Users/rahuldalal/test_data", symbol_name="w")
